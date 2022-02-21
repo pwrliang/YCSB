@@ -179,11 +179,11 @@ LICENSE file.
       <artifactId>maprjsondb-binding</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <dependency>
-      <groupId>site.ycsb</groupId>
-      <artifactId>mongodb-binding</artifactId>
-      <version>${project.version}</version>
-    </dependency>
+<!--    <dependency>-->
+<!--      <groupId>site.ycsb</groupId>-->
+<!--      <artifactId>mongodb-binding</artifactId>-->
+<!--      <version>${project.version}</version>-->
+<!--    </dependency>-->
     <dependency>
       <groupId>site.ycsb</groupId>
       <artifactId>nosqldb-binding</artifactId>
@@ -239,11 +239,11 @@ LICENSE file.
       <artifactId>scylla-binding</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <dependency>
-      <groupId>site.ycsb</groupId>
-      <artifactId>solr7-binding</artifactId>
-      <version>${project.version}</version>
-    </dependency>
+<!--    <dependency>-->
+<!--      <groupId>site.ycsb</groupId>-->
+<!--      <artifactId>solr7-binding</artifactId>-->
+<!--      <version>${project.version}</version>-->
+<!--    </dependency>-->
     <dependency>
       <groupId>site.ycsb</groupId>
       <artifactId>tarantool-binding</artifactId>

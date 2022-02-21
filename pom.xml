@@ -186,7 +186,7 @@ LICENSE file.
     <module>maprdb</module>
     <module>maprjsondb</module>
     <module>memcached</module>
-    <module>mongodb</module>
+<!--    <module>mongodb</module>-->
     <module>nosqldb</module>
     <module>orientdb</module>
     <module>postgrenosql</module>
@@ -198,23 +198,24 @@ LICENSE file.
     <module>s3</module>
     <module>seaweedfs</module>
     <module>scylla</module>
-    <module>solr7</module>
+<!--    <module>solr7</module>-->
     <module>tarantool</module>
     <module>tablestore</module>
     <module>voltdb</module>
     <module>zookeeper</module>
+    <module>grpcrocksdb</module>
   </modules>
 
   <build>
-    <pluginManagement>
-      <plugins>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-checkstyle-plugin</artifactId>
-          <version>2.16</version>
-        </plugin>
-      </plugins>
-    </pluginManagement>
+<!--    <pluginManagement>-->
+<!--      <plugins>-->
+<!--        <plugin>-->
+<!--          <groupId>org.apache.maven.plugins</groupId>-->
+<!--          <artifactId>maven-checkstyle-plugin</artifactId>-->
+<!--          <version>2.16</version>-->
+<!--        </plugin>-->
+<!--      </plugins>-->
+<!--    </pluginManagement>-->
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -245,26 +246,30 @@ LICENSE file.
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.7.0</version>
         <configuration>
+          <compilerArgs>
+            <arg>-h</arg>
+            <arg>target/headers</arg>
+          </compilerArgs>
           <source>1.8</source>
           <target>1.8</target>
         </configuration>
       </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-checkstyle-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>validate</id>
-            <phase>validate</phase>
-            <goals>
-              <goal>check</goal>
-            </goals>
-            <configuration>
-              <configLocation>checkstyle.xml</configLocation>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
+<!--      <plugin>-->
+<!--        <groupId>org.apache.maven.plugins</groupId>-->
+<!--        <artifactId>maven-checkstyle-plugin</artifactId>-->
+<!--        <executions>-->
+<!--          <execution>-->
+<!--            <id>validate</id>-->
+<!--            <phase>validate</phase>-->
+<!--            <goals>-->
+<!--              <goal>check</goal>-->
+<!--            </goals>-->
+<!--            <configuration>-->
+<!--              <configLocation>checkstyle.xml</configLocation>-->
+<!--            </configuration>-->
+<!--          </execution>-->
+<!--        </executions>-->
+<!--      </plugin>-->
     </plugins>
   </build>
   <profiles>
