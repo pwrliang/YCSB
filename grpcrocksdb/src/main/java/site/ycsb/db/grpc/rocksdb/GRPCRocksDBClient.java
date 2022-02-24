@@ -10,6 +10,10 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
+import static site.ycsb.Client.RECORD_COUNT_PROPERTY;
+import static site.ycsb.Workload.INSERT_COUNT_PROPERTY;
+import static site.ycsb.Workload.INSERT_START_PROPERTY;
+
 /**
  * GRPCRocksDBClient
  */
@@ -28,8 +32,6 @@ public class GRPCRocksDBClient extends DB {
 
   private long handle;
 
-  public static native void init_env(String name);
-
   public native long connect(String addr);
 
   public native byte[] get(long handle, final byte[] key);
@@ -46,7 +48,6 @@ public class GRPCRocksDBClient extends DB {
   public void init() throws DBException {
     String addr = getProperties().getProperty(PROPERTY_ADDR);
     handle = connect(addr);
-    System.out.println("Connecting to " + addr);
   }
 
   @Override
@@ -67,13 +68,11 @@ public class GRPCRocksDBClient extends DB {
       deserializeValues(val, fields, values);
       result.add(values);
     }
-
     return Status.OK;
   }
 
   @Override
   public Status update(String table, String key, Map<String, ByteIterator> values) {
-
     try {
       final Map<String, ByteIterator> result = new HashMap<>();
       final byte[] currentValues = get(handle, key.getBytes(StandardCharsets.UTF_8));
@@ -176,7 +175,6 @@ public class GRPCRocksDBClient extends DB {
 
 
   public static void main(String[] args) {
-    init_env("java");
     GRPCRocksDBClient client = new GRPCRocksDBClient();
     long handle = client.connect("localhost:12345");
     client.put(handle, "abc".getBytes(StandardCharsets.UTF_8), "def".getBytes(StandardCharsets.UTF_8));

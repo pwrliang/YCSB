@@ -1,0 +1,4 @@
+recordcount=10000
+operationcount=10000
+rocksdb.dir=/tmp/ycsb-rocksdb-data
+grpc.addr=localhost:12345
