@@ -289,19 +289,30 @@ def main():
         cp.extend(find_jars(os.path.join(ycsb_home, "lib")))
         cp.extend(find_jars(os.path.join(db_dir, "lib")))
     else:
-        warn("Running against a source checkout. In order to get our runtime "
-             "dependencies we'll have to invoke Maven. Depending on the state "
-             "of your system, this may take ~30-45 seconds")
         db_location = "core" if (binding == "basic" or binding == "basicts") else binding
         project = "core" if (binding == "basic" or binding == "basicts") else binding + "-binding"
         db_dir = os.path.join(ycsb_home, db_location)
-        # goes first so we can rely on side-effect of package
-        maven_says = get_classpath_from_maven(project)
-        # TODO when we have a version property, skip the glob
-        cp = find_jars(os.path.join(db_dir, "target"),
-                       project + "*.jar")
-        # alredy in jar:jar:jar form
-        cp.append(maven_says)
+        cp_path = os.path.join(ycsb_home, "cp.conf")
+        if os.path.exists(cp_path):
+            f_conf = open(cp_path, "r")
+            for line in f_conf:
+                cp = line.split(":")
+                break
+            f_conf.close()
+        else:
+            warn("Running against a source checkout. In order to get our runtime "
+                 "dependencies we'll have to invoke Maven. Depending on the state "
+                 "of your system, this may take ~30-45 seconds")
+            # goes first so we can rely on side-effect of package
+            maven_says = get_classpath_from_maven(project)
+            # TODO when we have a version property, skip the glob
+            cp = find_jars(os.path.join(db_dir, "target"),
+                           project + "*.jar")
+            # alredy in jar:jar:jar form
+            cp.append(maven_says)
+            f_conf = open(cp_path, "w")
+            f_conf.write(":".join(cp))
+            f_conf.close()
     cp.insert(0, os.path.join(db_dir, "conf"))
     classpath = os.pathsep.join(cp)
     if args.classpath:
