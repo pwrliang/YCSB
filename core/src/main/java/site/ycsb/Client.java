@@ -239,6 +239,7 @@ public final class Client {
 
       exporter.write("OVERALL", "RunTime(ms)", runtime);
       double throughput = 1000.0 * (opcount) / (runtime);
+      exporter.write("OVERALL", "OP", opcount);
       exporter.write("OVERALL", "Throughput(ops/sec)", throughput);
 
       final Map<String, Long[]> gcs = Utils.getGCStatst();
@@ -328,6 +329,7 @@ public final class Client {
     long st;
     long en;
     int opsDone;
+    long initTime = 0;
 
     try (final TraceScope span = tracer.newScope(CLIENT_WORKLOAD_SPAN)) {
 
@@ -353,6 +355,7 @@ public final class Client {
         try {
           entry.getKey().join();
           opsDone += entry.getValue().getOpsDone();
+          initTime += entry.getValue().getInitTime();
         } catch (InterruptedException ignored) {
           // ignored
         }
@@ -360,6 +363,7 @@ public final class Client {
 
       en = System.currentTimeMillis();
     }
+    initTime /= clients.size();
 
     try {
       try (final TraceScope span = tracer.newScope(CLIENT_CLEANUP_SPAN)) {
@@ -389,7 +393,7 @@ public final class Client {
 
     try {
       try (final TraceScope span = tracer.newScope(CLIENT_EXPORT_MEASUREMENTS_SPAN)) {
-        exportMeasurements(props, opsDone, en - st);
+        exportMeasurements(props, opsDone, en - st - initTime);
       }
     } catch (IOException e) {
       System.err.println("Could not export measurements, error: " + e.getMessage());
