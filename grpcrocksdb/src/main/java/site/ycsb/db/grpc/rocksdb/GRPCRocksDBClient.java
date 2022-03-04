@@ -1,18 +1,20 @@
 package site.ycsb.db.grpc.rocksdb;
 
+
+import mpi.MPI;
+import mpi.MPIException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import site.ycsb.*;
+import site.ycsb.ByteArrayByteIterator;
+import site.ycsb.ByteIterator;
+import site.ycsb.DB;
+import site.ycsb.DBException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-
-import static site.ycsb.Client.RECORD_COUNT_PROPERTY;
-import static site.ycsb.Workload.INSERT_COUNT_PROPERTY;
-import static site.ycsb.Workload.INSERT_START_PROPERTY;
 
 /**
  * GRPCRocksDBClient
@@ -30,7 +32,9 @@ public class GRPCRocksDBClient extends DB {
     System.loadLibrary("grpcrocksdbjni");    // loads libhello.so
   }
 
-  private long handle;
+  private static long handle;
+
+  private static long references;
 
   public native long connect(String addr);
 
@@ -46,38 +50,51 @@ public class GRPCRocksDBClient extends DB {
 
   @Override
   public void init() throws DBException {
-    String addr = getProperties().getProperty(PROPERTY_ADDR);
-    handle = connect(addr);
+    synchronized (GRPCRocksDBClient.class) {
+      if (handle == 0) {
+        String addr = getProperties().getProperty(PROPERTY_ADDR);
+        handle = connect(addr);
+      }
+      references++;
+    }
+    try {
+      MPI.Init(new String[0]);
+      System.out.println("Client number: " + MPI.COMM_WORLD.getSize());
+      MPI.COMM_WORLD.barrier();
+    } catch (MPIException e) {
+      e.printStackTrace();
+      System.exit(1);
+    }
   }
 
   @Override
-  public Status read(String table, String key, Set<String> fields, Map<String, ByteIterator> result) {
+  public site.ycsb.Status read(String table, String key, Set<String> fields, Map<String, ByteIterator> result) {
     byte[] val = get(handle, key.getBytes(StandardCharsets.UTF_8));
     if (val != null) {
       deserializeValues(val, fields, result);
-      return Status.OK;
+      return site.ycsb.Status.OK;
     }
-    return Status.NOT_FOUND;
+    return site.ycsb.Status.NOT_FOUND;
   }
 
   @Override
-  public Status scan(String table, String startkey, int recordcount, Set<String> fields, Vector<HashMap<String, ByteIterator>> result) {
+  public site.ycsb.Status scan(String table, String startkey, int recordcount, Set<String> fields, Vector<HashMap<String, ByteIterator>> result) {
     KVPairs kvPairs = scan(handle, startkey.getBytes(StandardCharsets.UTF_8), recordcount, false);
     for (byte[] val : kvPairs.values) {
       final HashMap<String, ByteIterator> values = new HashMap<>();
       deserializeValues(val, fields, values);
       result.add(values);
     }
-    return Status.OK;
+    return site.ycsb.Status.OK;
   }
 
   @Override
-  public Status update(String table, String key, Map<String, ByteIterator> values) {
+  public site.ycsb.Status update(String table, String key, Map<String, ByteIterator> values) {
     try {
       final Map<String, ByteIterator> result = new HashMap<>();
       final byte[] currentValues = get(handle, key.getBytes(StandardCharsets.UTF_8));
       if (currentValues == null) {
-        return Status.NOT_FOUND;
+        return site.ycsb.Status.NOT_FOUND;
       }
       deserializeValues(currentValues, null, result);
 
@@ -87,36 +104,48 @@ public class GRPCRocksDBClient extends DB {
       //store
       int err = put(handle, key.getBytes(StandardCharsets.UTF_8), serializeValues(result));
       if (err == 0) {
-        return Status.OK;
+        return site.ycsb.Status.OK;
       } else {
-        return Status.ERROR;
+        return site.ycsb.Status.ERROR;
       }
     } catch (IOException e) {
       LOGGER.error(e.getMessage(), e);
-      return Status.ERROR;
+      return site.ycsb.Status.ERROR;
     }
   }
 
   @Override
-  public Status insert(String table, String key, Map<String, ByteIterator> values) {
+  public site.ycsb.Status insert(String table, String key, Map<String, ByteIterator> values) {
     try {
       put(handle, key.getBytes(StandardCharsets.UTF_8), serializeValues(values));
-      return Status.OK;
+      return site.ycsb.Status.OK;
     } catch (IOException e) {
       LOGGER.error(e.getMessage(), e);
-      return Status.ERROR;
+      return site.ycsb.Status.ERROR;
     }
   }
 
   @Override
-  public Status delete(String table, String key) {
+  public site.ycsb.Status delete(String table, String key) {
     System.out.println("Delete " + key);
-    return delete(handle, key.getBytes(StandardCharsets.UTF_8)) == 0 ? Status.OK : Status.ERROR;
+    return delete(handle, key.getBytes(StandardCharsets.UTF_8)) == 0 ? site.ycsb.Status.OK : site.ycsb.Status.ERROR;
   }
 
   @Override
   public void cleanup() throws DBException {
-    disconnect(handle);
+    synchronized (GRPCRocksDBClient.class) {
+      if (references == 1) {
+        disconnect(handle);
+        handle = 0;
+        try {
+          MPI.Finalize();
+        } catch (MPIException e) {
+          e.printStackTrace();
+          System.exit(1);
+        }
+      }
+      references--;
+    }
   }
 
   private Map<String, ByteIterator> deserializeValues(final byte[] values, final Set<String> fields, final Map<String, ByteIterator> result) {
@@ -171,16 +200,5 @@ public class GRPCRocksDBClient extends DB {
       }
       return baos.toByteArray();
     }
-  }
-
-
-  public static void main(String[] args) {
-    GRPCRocksDBClient client = new GRPCRocksDBClient();
-    long handle = client.connect("localhost:12345");
-    client.put(handle, "abc".getBytes(StandardCharsets.UTF_8), "def".getBytes(StandardCharsets.UTF_8));
-//    System.out.println(new String(client.get(handle, "abc".getBytes(StandardCharsets.UTF_8))));
-//    client.delete(handle, "abc".getBytes(StandardCharsets.UTF_8));
-//    System.out.println(client.get(handle, "abc".getBytes(StandardCharsets.UTF_8)));
-    System.out.println(client.scan(handle, "".getBytes(StandardCharsets.UTF_8), Integer.MAX_VALUE, false).values.size());
   }
 }
