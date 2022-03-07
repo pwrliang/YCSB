@@ -14,6 +14,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 /**
@@ -48,6 +50,12 @@ public class GRPCRocksDBClient extends DB {
 
   public native void disconnect(long handle);
 
+  private void PrintTime(String msg) {
+    SimpleDateFormat sdf3 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+    System.out.println(msg + " " + sdf3.format(timestamp));
+  }
+
   @Override
   public void init() throws DBException {
     synchronized (GRPCRocksDBClient.class) {
@@ -65,6 +73,7 @@ public class GRPCRocksDBClient extends DB {
       e.printStackTrace();
       System.exit(1);
     }
+    PrintTime("Ready Time:");
   }
 
   @Override
@@ -134,6 +143,7 @@ public class GRPCRocksDBClient extends DB {
   @Override
   public void cleanup() throws DBException {
     synchronized (GRPCRocksDBClient.class) {
+      PrintTime("End Time:");
       if (references == 1) {
         disconnect(handle);
         handle = 0;
