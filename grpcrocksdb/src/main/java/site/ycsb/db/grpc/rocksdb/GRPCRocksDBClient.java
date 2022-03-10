@@ -62,16 +62,16 @@ public class GRPCRocksDBClient extends DB {
       if (handle == 0) {
         String addr = getProperties().getProperty(PROPERTY_ADDR);
         handle = connect(addr);
+        try {
+          MPI.Init(new String[0]);
+          System.out.println("Client number: " + MPI.COMM_WORLD.getSize());
+          MPI.COMM_WORLD.barrier();
+        } catch (MPIException e) {
+          e.printStackTrace();
+          System.exit(1);
+        }
       }
       references++;
-    }
-    try {
-      MPI.Init(new String[0]);
-      System.out.println("Client number: " + MPI.COMM_WORLD.getSize());
-      MPI.COMM_WORLD.barrier();
-    } catch (MPIException e) {
-      e.printStackTrace();
-      System.exit(1);
     }
     PrintTime("Ready Time:");
   }
