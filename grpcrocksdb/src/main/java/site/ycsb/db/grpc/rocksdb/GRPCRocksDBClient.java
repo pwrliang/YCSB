@@ -5,10 +5,7 @@ import mpi.MPI;
 import mpi.MPIException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import site.ycsb.ByteArrayByteIterator;
-import site.ycsb.ByteIterator;
-import site.ycsb.DB;
-import site.ycsb.DBException;
+import site.ycsb.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -53,8 +50,13 @@ public class GRPCRocksDBClient extends DB {
   private void PrintTime(String msg) {
     SimpleDateFormat sdf3 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
-    System.out.println(msg + " " + sdf3.format(timestamp));
+    try {
+      System.out.println("Rank: " + MPI.COMM_WORLD.getRank() + " " + msg + " " + sdf3.format(timestamp));
+    } catch (MPIException e) {
+      e.printStackTrace();
+    }
   }
+
 
   @Override
   public void init() throws DBException {
@@ -62,14 +64,6 @@ public class GRPCRocksDBClient extends DB {
       if (handle == 0) {
         String addr = getProperties().getProperty(PROPERTY_ADDR);
         handle = connect(addr);
-        try {
-          MPI.Init(new String[0]);
-          System.out.println("Client number: " + MPI.COMM_WORLD.getSize());
-          MPI.COMM_WORLD.barrier();
-        } catch (MPIException e) {
-          e.printStackTrace();
-          System.exit(1);
-        }
       }
       references++;
     }
@@ -147,14 +141,9 @@ public class GRPCRocksDBClient extends DB {
       if (references == 1) {
         disconnect(handle);
         handle = 0;
-        try {
-          MPI.Finalize();
-        } catch (MPIException e) {
-          e.printStackTrace();
-          System.exit(1);
-        }
       }
       references--;
+      PrintTime("Disconnected");
     }
   }
 

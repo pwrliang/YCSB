@@ -17,12 +17,14 @@
 
 package site.ycsb;
 
-import site.ycsb.measurements.Measurements;
-import site.ycsb.measurements.exporter.MeasurementsExporter;
-import site.ycsb.measurements.exporter.TextMeasurementsExporter;
+import mpi.MPI;
+import mpi.MPIException;
 import org.apache.htrace.core.HTraceConfiguration;
 import org.apache.htrace.core.TraceScope;
 import org.apache.htrace.core.Tracer;
+import site.ycsb.measurements.Measurements;
+import site.ycsb.measurements.exporter.MeasurementsExporter;
+import site.ycsb.measurements.exporter.TextMeasurementsExporter;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -276,6 +278,12 @@ public final class Client {
 
   @SuppressWarnings("unchecked")
   public static void main(String[] args) {
+    try {
+      MPI.Init(new String[0]);
+    } catch (MPIException e) {
+      e.printStackTrace();
+      System.exit(1);
+    }
     Properties props = parseArguments(args);
 
     boolean status = Boolean.valueOf(props.getProperty(STATUS_PROPERTY, String.valueOf(false)));
@@ -332,12 +340,11 @@ public final class Client {
     long initTime = 0;
 
     try (final TraceScope span = tracer.newScope(CLIENT_WORKLOAD_SPAN)) {
-
       final Map<Thread, ClientThread> threads = new HashMap<>(threadcount);
       for (ClientThread client : clients) {
         threads.put(new Thread(tracer.wrap(client, "ClientThread")), client);
       }
-
+      GlobalBarrier.barrier();
       st = System.currentTimeMillis();
 
       for (Thread t : threads.keySet()) {
@@ -360,7 +367,7 @@ public final class Client {
           // ignored
         }
       }
-
+      GlobalBarrier.barrier();
       en = System.currentTimeMillis();
     }
     initTime /= clients.size();
@@ -390,7 +397,11 @@ public final class Client {
       e.printStackTrace(System.out);
       System.exit(0);
     }
-
+    try {
+      System.out.println("Rank: " + MPI.COMM_WORLD.getRank() + " Conn Time: " + initTime);
+    } catch (MPIException e) {
+      e.printStackTrace();
+    }
     try {
       try (final TraceScope span = tracer.newScope(CLIENT_EXPORT_MEASUREMENTS_SPAN)) {
         exportMeasurements(props, opsDone, en - st - initTime);
@@ -400,8 +411,12 @@ public final class Client {
       e.printStackTrace();
       System.exit(-1);
     }
-
-    System.exit(0);
+    try {
+      MPI.Finalize();
+    } catch (MPIException e) {
+      e.printStackTrace();
+      System.exit(1);
+    }
   }
 
   private static List<ClientThread> initDb(String dbname, Properties props, int threadcount,
@@ -422,7 +437,7 @@ public final class Client {
           opcount = Integer.parseInt(props.getProperty(RECORD_COUNT_PROPERTY, DEFAULT_RECORD_COUNT));
         }
       }
-      if (threadcount > opcount && opcount > 0){
+      if (threadcount > opcount && opcount > 0) {
         threadcount = opcount;
         System.out.println("Warning: the threadcount is bigger than recordcount, the threadcount will be recordcount!");
       }
@@ -615,7 +630,7 @@ public final class Client {
         }
 
         //Issue #5 - remove call to stringPropertyNames to make compilable under Java 1.5
-        for (Enumeration e = myfileprops.propertyNames(); e.hasMoreElements();) {
+        for (Enumeration e = myfileprops.propertyNames(); e.hasMoreElements(); ) {
           String prop = (String) e.nextElement();
 
           fileprops.setProperty(prop, myfileprops.getProperty(prop));
@@ -665,7 +680,7 @@ public final class Client {
     //overwrite file properties with properties from the command line
 
     //Issue #5 - remove call to stringPropertyNames to make compilable under Java 1.5
-    for (Enumeration e = props.propertyNames(); e.hasMoreElements();) {
+    for (Enumeration e = props.propertyNames(); e.hasMoreElements(); ) {
       String prop = (String) e.nextElement();
 
       fileprops.setProperty(prop, props.getProperty(prop));
