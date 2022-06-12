@@ -150,7 +150,6 @@ public final class Client {
    * Use label for status (e.g. to label one experiment out of a whole batch).
    */
   public static final String LABEL_PROPERTY = "label";
-  public static final String WORKER_PROPORTION = "worker.proportion";
 
   /**
    * An optional thread used to track progress and measure JVM stats.
@@ -279,29 +278,17 @@ public final class Client {
 
   @SuppressWarnings("unchecked")
   public static void main(String[] args) {
-    int nProc = 0;
-    int rank = 0;
     try {
       MPI.Init(new String[0]);
-      rank = MPI.COMM_WORLD.getRank();
-      nProc = MPI.COMM_WORLD.getSize();
     } catch (MPIException e) {
       e.printStackTrace();
       System.exit(1);
     }
     Properties props = parseArguments(args);
-    float worker_proportion = Float.parseFloat(props.getProperty(WORKER_PROPORTION, "1.0"));
-    int worker_count = (int) Math.ceil(worker_proportion * nProc);
-    boolean shouldWork = false;
-    boolean status = Boolean.valueOf(props.getProperty(STATUS_PROPERTY, String.valueOf(false)));
 
-    if (rank < worker_count) {
-      shouldWork = true;
-    } else {
-      System.out.println("*********Rank " + rank + " will not work*********");
-      status = false;
-    }
+    boolean status = Boolean.valueOf(props.getProperty(STATUS_PROPERTY, String.valueOf(false)));
     String label = props.getProperty(LABEL_PROPERTY, "");
+
     long maxExecutionTime = Integer.parseInt(props.getProperty(MAX_EXECUTION_TIME, "0"));
 
     //get number of threads, target and db
@@ -331,7 +318,7 @@ public final class Client {
     final CountDownLatch completeLatch = new CountDownLatch(threadcount);
 
     final List<ClientThread> clients = initDb(dbname, props, threadcount, targetperthreadperms,
-        workload, tracer, completeLatch, shouldWork);
+        workload, tracer, completeLatch);
 
     if (status) {
       boolean standardstatus = false;
@@ -350,15 +337,13 @@ public final class Client {
     long st;
     long en;
     int opsDone;
+    long initTime = 0;
 
     try (final TraceScope span = tracer.newScope(CLIENT_WORKLOAD_SPAN)) {
       final Map<Thread, ClientThread> threads = new HashMap<>(threadcount);
-
       for (ClientThread client : clients) {
         threads.put(new Thread(tracer.wrap(client, "ClientThread")), client);
-        client.init();
       }
-
       GlobalBarrier.barrier();
       st = System.currentTimeMillis();
 
@@ -366,7 +351,7 @@ public final class Client {
         t.start();
       }
 
-      if (shouldWork && maxExecutionTime > 0) {
+      if (maxExecutionTime > 0) {
         terminator = new TerminatorThread(maxExecutionTime, threads.keySet(), workload);
         terminator.start();
       }
@@ -377,17 +362,15 @@ public final class Client {
         try {
           entry.getKey().join();
           opsDone += entry.getValue().getOpsDone();
+          initTime += entry.getValue().getInitTime();
         } catch (InterruptedException ignored) {
           // ignored
         }
       }
-
       GlobalBarrier.barrier();
       en = System.currentTimeMillis();
-      for (ClientThread client : clients) {
-        client.cleanUp();
-      }
     }
+    initTime /= clients.size();
 
     try {
       try (final TraceScope span = tracer.newScope(CLIENT_CLEANUP_SPAN)) {
@@ -415,13 +398,13 @@ public final class Client {
       System.exit(0);
     }
     try {
-      System.out.println("Rank: " + MPI.COMM_WORLD.getRank());
+      System.out.println("Rank: " + MPI.COMM_WORLD.getRank() + " Conn Time: " + initTime);
     } catch (MPIException e) {
       e.printStackTrace();
     }
     try {
       try (final TraceScope span = tracer.newScope(CLIENT_EXPORT_MEASUREMENTS_SPAN)) {
-        exportMeasurements(props, opsDone, en - st);
+        exportMeasurements(props, opsDone, en - st - initTime);
       }
     } catch (IOException e) {
       System.err.println("Could not export measurements, error: " + e.getMessage());
@@ -438,7 +421,7 @@ public final class Client {
 
   private static List<ClientThread> initDb(String dbname, Properties props, int threadcount,
                                            double targetperthreadperms, Workload workload, Tracer tracer,
-                                           CountDownLatch completeLatch, boolean shouldWork) {
+                                           CountDownLatch completeLatch) {
     boolean initFailed = false;
     boolean dotransactions = Boolean.valueOf(props.getProperty(DO_TRANSACTIONS_PROPERTY, String.valueOf(true)));
 
@@ -476,7 +459,7 @@ public final class Client {
         }
 
         ClientThread t = new ClientThread(db, dotransactions, workload, props, threadopcount, targetperthreadperms,
-            completeLatch, shouldWork);
+            completeLatch);
         t.setThreadId(threadid);
         t.setThreadCount(threadcount);
         clients.add(t);

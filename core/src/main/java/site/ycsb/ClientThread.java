@@ -18,7 +18,6 @@
 package site.ycsb;
 
 import site.ycsb.measurements.Measurements;
-
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadLocalRandom;
@@ -45,8 +44,7 @@ public class ClientThread implements Runnable {
   private Properties props;
   private long targetOpsTickNs;
   private final Measurements measurements;
-  private boolean shouldWork;
-
+  private long initTime;
   /**
    * Constructor.
    *
@@ -59,7 +57,7 @@ public class ClientThread implements Runnable {
    * @param completeLatch        The latch tracking the completion of all clients.
    */
   public ClientThread(DB db, boolean dotransactions, Workload workload, Properties props, int opcount,
-                      double targetperthreadperms, CountDownLatch completeLatch, boolean shouldWork) {
+                      double targetperthreadperms, CountDownLatch completeLatch) {
     this.db = db;
     this.dotransactions = dotransactions;
     this.workload = workload;
@@ -73,7 +71,6 @@ public class ClientThread implements Runnable {
     measurements = Measurements.getMeasurements();
     spinSleep = Boolean.valueOf(this.props.getProperty("spin.sleep", "false"));
     this.completeLatch = completeLatch;
-    this.shouldWork = shouldWork;
   }
 
   public void setThreadId(final int threadId) {
@@ -88,7 +85,9 @@ public class ClientThread implements Runnable {
     return opsdone;
   }
 
-  public void init() {
+  @Override
+  public void run() {
+    initTime -= System.currentTimeMillis();
     try {
       db.init();
     } catch (DBException e) {
@@ -96,66 +95,60 @@ public class ClientThread implements Runnable {
       e.printStackTrace(System.out);
       return;
     }
-  }
+    initTime += System.currentTimeMillis();
 
-  @Override
-  public void run() {
-    if (shouldWork) {
-      try {
-        workloadstate = workload.initThread(props, threadid, threadcount);
-      } catch (WorkloadException e) {
-        e.printStackTrace();
-        e.printStackTrace(System.out);
-        return;
-      }
-
-      //NOTE: Switching to using nanoTime and parkNanos for time management here such that the measurements
-      // and the client thread have the same view on time.
-
-      //spread the thread operations out so they don't all hit the DB at the same time
-      // GH issue 4 - throws exception if _target>1 because random.nextInt argument must be >0
-      // and the sleep() doesn't make sense for granularities < 1 ms anyway
-      if ((targetOpsPerMs > 0) && (targetOpsPerMs <= 1.0)) {
-        long randomMinorDelay = ThreadLocalRandom.current().nextInt((int) targetOpsTickNs);
-        sleepUntil(System.nanoTime() + randomMinorDelay);
-      }
-      try {
-        if (dotransactions) {
-          long startTimeNanos = System.nanoTime();
-
-          while (((opcount == 0) || (opsdone < opcount)) && !workload.isStopRequested()) {
-
-            if (!workload.doTransaction(db, workloadstate)) {
-              break;
-            }
-
-            opsdone++;
-
-            throttleNanos(startTimeNanos);
-          }
-        } else {
-          long startTimeNanos = System.nanoTime();
-
-          while (((opcount == 0) || (opsdone < opcount)) && !workload.isStopRequested()) {
-
-            if (!workload.doInsert(db, workloadstate)) {
-              break;
-            }
-
-            opsdone++;
-
-            throttleNanos(startTimeNanos);
-          }
-        }
-      } catch (Exception e) {
-        e.printStackTrace();
-        e.printStackTrace(System.out);
-        System.exit(0);
-      }
+    try {
+      workloadstate = workload.initThread(props, threadid, threadcount);
+    } catch (WorkloadException e) {
+      e.printStackTrace();
+      e.printStackTrace(System.out);
+      return;
     }
-  }
 
-  void cleanUp() {
+    //NOTE: Switching to using nanoTime and parkNanos for time management here such that the measurements
+    // and the client thread have the same view on time.
+
+    //spread the thread operations out so they don't all hit the DB at the same time
+    // GH issue 4 - throws exception if _target>1 because random.nextInt argument must be >0
+    // and the sleep() doesn't make sense for granularities < 1 ms anyway
+    if ((targetOpsPerMs > 0) && (targetOpsPerMs <= 1.0)) {
+      long randomMinorDelay = ThreadLocalRandom.current().nextInt((int) targetOpsTickNs);
+      sleepUntil(System.nanoTime() + randomMinorDelay);
+    }
+    try {
+      if (dotransactions) {
+        long startTimeNanos = System.nanoTime();
+
+        while (((opcount == 0) || (opsdone < opcount)) && !workload.isStopRequested()) {
+
+          if (!workload.doTransaction(db, workloadstate)) {
+            break;
+          }
+
+          opsdone++;
+
+          throttleNanos(startTimeNanos);
+        }
+      } else {
+        long startTimeNanos = System.nanoTime();
+
+        while (((opcount == 0) || (opsdone < opcount)) && !workload.isStopRequested()) {
+
+          if (!workload.doInsert(db, workloadstate)) {
+            break;
+          }
+
+          opsdone++;
+
+          throttleNanos(startTimeNanos);
+        }
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+      e.printStackTrace(System.out);
+      System.exit(0);
+    }
+
     try {
       measurements.setIntendedStartTimeNs(0);
       db.cleanup();
@@ -191,5 +184,9 @@ public class ClientThread implements Runnable {
   int getOpsTodo() {
     int todo = opcount - opsdone;
     return todo < 0 ? 0 : todo;
+  }
+
+  public long getInitTime() {
+    return initTime;
   }
 }
