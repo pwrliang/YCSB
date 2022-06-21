@@ -337,19 +337,23 @@ public final class Client {
     long st;
     long en;
     int opsDone;
-    long initTime = 0;
 
     try (final TraceScope span = tracer.newScope(CLIENT_WORKLOAD_SPAN)) {
       final Map<Thread, ClientThread> threads = new HashMap<>(threadcount);
+      CountDownLatch countDownLatch = new CountDownLatch(threadcount);
+
       for (ClientThread client : clients) {
+        client.countDownLatch = countDownLatch;
         threads.put(new Thread(tracer.wrap(client, "ClientThread")), client);
       }
-      GlobalBarrier.barrier();
-      st = System.currentTimeMillis();
 
       for (Thread t : threads.keySet()) {
         t.start();
       }
+
+      countDownLatch.await(); // Hack: waiting for all client threads initialized
+      GlobalBarrier.barrier(); // Waiting for all processes are started
+      st = System.currentTimeMillis(); // start timing
 
       if (maxExecutionTime > 0) {
         terminator = new TerminatorThread(maxExecutionTime, threads.keySet(), workload);
@@ -362,15 +366,15 @@ public final class Client {
         try {
           entry.getKey().join();
           opsDone += entry.getValue().getOpsDone();
-          initTime += entry.getValue().getInitTime();
         } catch (InterruptedException ignored) {
           // ignored
         }
       }
-      GlobalBarrier.barrier();
+      GlobalBarrier.barrier(); // waiting for all processes are finished
       en = System.currentTimeMillis();
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
     }
-    initTime /= clients.size();
 
     try {
       try (final TraceScope span = tracer.newScope(CLIENT_CLEANUP_SPAN)) {
@@ -398,13 +402,8 @@ public final class Client {
       System.exit(0);
     }
     try {
-      System.out.println("Rank: " + MPI.COMM_WORLD.getRank() + " Conn Time: " + initTime);
-    } catch (MPIException e) {
-      e.printStackTrace();
-    }
-    try {
       try (final TraceScope span = tracer.newScope(CLIENT_EXPORT_MEASUREMENTS_SPAN)) {
-        exportMeasurements(props, opsDone, en - st - initTime);
+        exportMeasurements(props, opsDone, en - st);
       }
     } catch (IOException e) {
       System.err.println("Could not export measurements, error: " + e.getMessage());

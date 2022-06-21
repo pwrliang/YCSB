@@ -44,7 +44,8 @@ public class ClientThread implements Runnable {
   private Properties props;
   private long targetOpsTickNs;
   private final Measurements measurements;
-  private long initTime;
+
+  public CountDownLatch countDownLatch; // Hack, notify main thread that I'm ready
   /**
    * Constructor.
    *
@@ -87,7 +88,6 @@ public class ClientThread implements Runnable {
 
   @Override
   public void run() {
-    initTime -= System.currentTimeMillis();
     try {
       db.init();
     } catch (DBException e) {
@@ -95,7 +95,7 @@ public class ClientThread implements Runnable {
       e.printStackTrace(System.out);
       return;
     }
-    initTime += System.currentTimeMillis();
+    countDownLatch.countDown();
 
     try {
       workloadstate = workload.initThread(props, threadid, threadcount);
@@ -184,9 +184,5 @@ public class ClientThread implements Runnable {
   int getOpsTodo() {
     int todo = opcount - opsdone;
     return todo < 0 ? 0 : todo;
-  }
-
-  public long getInitTime() {
-    return initTime;
   }
 }
