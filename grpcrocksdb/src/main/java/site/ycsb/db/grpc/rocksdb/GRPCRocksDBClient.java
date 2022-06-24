@@ -67,7 +67,6 @@ public class GRPCRocksDBClient extends DB {
       }
       references++;
     }
-    PrintTime("Ready Time:");
   }
 
   @Override
@@ -130,20 +129,17 @@ public class GRPCRocksDBClient extends DB {
 
   @Override
   public site.ycsb.Status delete(String table, String key) {
-    System.out.println("Delete " + key);
     return delete(handle, key.getBytes(StandardCharsets.UTF_8)) == 0 ? site.ycsb.Status.OK : site.ycsb.Status.ERROR;
   }
 
   @Override
   public void cleanup() throws DBException {
     synchronized (GRPCRocksDBClient.class) {
-      PrintTime("End Time:");
       if (references == 1) {
         disconnect(handle);
         handle = 0;
       }
       references--;
-      PrintTime("Disconnected");
     }
   }
 
